@@ -1,0 +1,898 @@
+Competition Description
+
+The sinking of the RMS Titanic is one of the most infamous shipwrecks in history.  On April 15, 1912, during her maiden voyage, the Titanic sank after colliding with an iceberg, killing 1502 out of 2224 passengers and crew. This sensational tragedy shocked the international community and led to better safety regulations for ships.
+
+One of the reasons that the shipwreck led to such loss of life was that there were not enough lifeboats for the passengers and crew. Although there was some element of luck involved in surviving the sinking, some groups of people were more likely to survive than others, such as women, children, and the upper-class.
+
+In this challenge, we ask you to complete the analysis of what sorts of people were likely to survive. In particular, we ask you to apply the tools of machine learning to predict which passengers survived the tragedy.
+
+
+1.1 Load the required library
+
+```{r}
+# Load all the packages required for the analysis
+library(dplyr) # Data Manipulation
+library(naniar)
+library(Amelia) # Missing Data: Missings Map
+library(ggplot2) # Visualization
+library(scales) # Visualization
+library(caTools) # Prediction: Splitting Data
+library(car) # Prediction: Checking Multicollinearity
+library(ROCR) # Prediction: ROC Curve
+library(e1071) # Prediction: SVM, Naive Bayes, Parameter Tuning
+library(rpart) # Prediction: Decision Tree
+library(rpart.plot) # Prediction: Decision Tree
+library(randomForest) # Prediction: Random Forest
+library(caret) # Prediction: k-Fold Cross Validation
+library(pROC) #Plot the ROC for logistic regression
+```
+
+1.2 Read the train and test data from titanic data
+
+
+```{r}
+titanic_trainData = read.csv("E:/MachineLearning_Model/kaggle/classification_kaggle/titanic/train.csv")
+titanic_testData =read.csv("E:/MachineLearning_Model/kaggle/classification_kaggle/titanic/test.csv")
+```
+
+#combine the data
+
+```{r}
+titanic_mainData= bind_rows(titanic_trainData, titanic_testData)
+```
+
+# veify the data structure
+```{r}
+str(titanic_mainData)
+```
+
+#summarize the data
+```{r}
+summary(titanic_mainData)
+```
+#We can see that Survived, Age and Fare consist of missing values.
+
+2. Handling missing data
+
+```{r}
+gg_miss_var(titanic_mainData)
+```
+#Check missing values
+
+```{r}
+colSums(is.na(titanic_mainData) | titanic_mainData=='')
+```
+# Note - Survived - 418, age-263 have missing of NAs, cabin- 1014, fare-1 and embarked-2 have blank or spaces
+
+#missmap allows us to explore how much missing data we have.
+
+
+```{r}
+missmap(titanic_mainData, main = "Titanic Data - Missing Data", col = c("Red", "Yellow"), legend=FALSE)
+```
+2.1 Fix the missing data for Fare
+
+# Extract the row which contains the missing Fare
+
+```{r}
+filter(titanic_mainData, is.na(Fare) | Fare == '')
+```
+
+```{r}
+nrow(filter(titanic_mainData, is.na(Fare) | Fare == ''))
+```
+# The passenger belong from class 3 , hence lets repalce the common value for fare from class 3 ticket fare. Also passenger started from S
+
+```{r}
+ggplot(filter(titanic_mainData, Pclass == 3 & Embarked =="S"), aes(Fare))+
+  geom_density(fill="black", alpha=0.5) +
+  geom_vline(aes(xintercept=median(Fare, na.rm=T)), colour='green', linetype='dashed', size=2) +
+  geom_vline(aes(xintercept=mean(Fare, na.rm=T)), colour='pink', linetype='dashed', size=2) +
+  ggtitle("Fare distribution of third class passengers \n embarked from S port") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+# Since mean and median are very far and median is effective as comapred to mean, replace missing fare with median instead of mena
+
+```{r}
+titanic_mainData$Fare[is.na(titanic_mainData$Fare)== TRUE ] = median(filter(titanic_mainData, Pclass==3 & Embarked=="S")$Fare, na.rm=TRUE)
+
+#Pclass3_median <- titanic_mainData %>% filter(Pclass == 3 & Embarked == "S")  %>% summary(titanic_mainData)
+#Summary of missing values
+colSums(is.na(titanic_mainData) | titanic_mainData=='')
+
+
+```
+# Note Fare is replaced with value 8.05 and no missing values
+2.2 Fix the missing value for Embarked.
+```{r}
+filter(titanic_mainData, is.na(Embarked) | Embarked=='')
+```
+The missing embarked female belong to cabin B28, not sure why having same ticket, lets fix this.
+
+#First find the most frequent Embarked for Pclass passenger.
+```{r}
+table(filter(titanic_mainData, Pclass==1)$Embarked)
+```
+The most frequest Embark from first class passenger is "S" ie 177, we can replace value with the "S" for all missing Embarked.
+
+Let us find the mean fair for each port to support above assumptions.
+
+
+```{r}
+ggplot(filter(titanic_mainData, is.na(Embarked) == FALSE | Embarked != '' & Pclass == 1), aes(x=Embarked, y=Fare)) +
+  
+  geom_boxplot(aes(colour = Embarked)) +
+  geom_hline(aes(yintercept=80), colour = "blue", linetype="dashed", size=2) +
+  ggtitle("Fare distribution of first class passenger")
+  #theme(plot.title = element_text)
+
+
+
+```
+From above chart look like 80 fare belong to C port
+
+```{r}
+titanic_mainData$Embarked[titanic_mainData$Embarked == ''] = "C"
+colSums(is.na(titanic_mainData) | titanic_mainData=='')
+```
+```{r}
+filter(titanic_mainData, is.na(Embarked) | Embarked=='')
+```
+2.3 Missing value fix for Age
+
+```{r}
+titanic_mainData %>% filter(is.na(Age) | Age=='') %>% group_by(Pclass)
+```
+```{r}
+#this calcualtion is for mean calculation to print in box plot
+means <- round(aggregate(Age ~  Pclass, titanic_mainData, mean))
+ggplot(titanic_mainData, aes(x=as.factor(Pclass), y=Age)) +
+  geom_boxplot(aes(colour=Pclass)) +
+  stat_summary(fun.y=mean, colour="darkred", geom="point", shape=18, size=3,show_guide = FALSE) + 
+  geom_text(data = means,aes(label = Age, y = Age + 8)) + # This code print mean ,age + 8 is done for above printing
+  geom_hline(aes(yintercept=mean(Age, na.rm=T)), colour = "red", linetype="dashed", size=2) +
+  ggtitle("Age distribution class wise") 
+ means
+```
+
+```{r}
+titanic_mainData <- titanic_mainData
+
+####################Replace the value with mean age of  class -1#############################
+titanic_mainData$Age[is.na(titanic_mainData$Age) & titanic_mainData$Pclass == 1] = round(mean(filter(titanic_mainData,Pclass==1)$Age, na.rm=TRUE),0)
+
+#Verify if the replacement is correct
+titanic_mainData$Age[titanic_mainData$Pclass == 1]
+
+# As per from box plot the average is almost 39
+round(mean(filter(titanic_mainData,Pclass==1)$Age, na.rm=TRUE),0)
+
+##############Replace age for class =2 #####################################
+titanic_mainData$Age[is.na(titanic_mainData$Age) & titanic_mainData$Pclass == 2] = round(mean(filter(titanic_mainData,Pclass==2)$Age, na.rm=TRUE),0)
+
+#Verify if the replacement is correct
+titanic_mainData$Age[titanic_mainData$Pclass == 2]
+
+# As per from box plot the average is almost 30
+round(mean(filter(titanic_mainData,Pclass==2)$Age, na.rm=TRUE),0)
+
+##############Replace age for class =3 #########################################
+titanic_mainData$Age[is.na(titanic_mainData$Age) & titanic_mainData$Pclass == 3] = round(mean(filter(titanic_mainData,Pclass==3)$Age, na.rm=TRUE),0)
+
+#Verify if the replacement is correct
+titanic_mainData$Age[titanic_mainData$Pclass == 3]
+
+# As per from box plot the average is almost 25
+round(mean(filter(titanic_mainData,Pclass==3)$Age, na.rm=TRUE),0)
+
+```
+
+# Checking missing values
+```{r}
+colSums(is.na(titanic_mainData)|titanic_mainData=='')
+
+```
+
+3. Feature engineering
+
+3.1 Passenger Tile - Convert titles for male and female into standard format ie Mr or Mrs
+
+```{r}
+head(titanic_mainData$Name)
+```
+
+#Extract passenger title from name
+```{r}
+titanic_mainData$Title <- gsub("^.*, (.*?)\\..*$", "\\1", titanic_mainData$Name)
+head(titanic_mainData$Title)
+```
+
+#Occurance of title based on sex
+```{r}
+table(titanic_mainData$Sex, titanic_mainData$Title)
+
+```
+
+#Regularize the title for female
+```{r}
+titanic_mainData$Title[titanic_mainData$Title %in%  c("Mlle", "Ms")] <- "Miss"
+titanic_mainData$Title[titanic_mainData$Title == "Mme"] <- "Mrs"
+```
+
+```{r}
+titanic_mainData$Title[titanic_mainData$Title %in%  c(c('Dona', 'Dr', 'Lady', 'the Countess','Capt', 'Col', 'Don', 'Jonkheer', 'Major', 'Rev', 'Sir'))] <- "other"
+```
+
+#Verify repalcement
+```{r}
+table(titanic_mainData$Sex, titanic_mainData$Title)
+```
+
+#Check family size, add feature
+```{r}
+FamilyMember <- titanic_mainData$SibSp + titanic_mainData$Parch + 1
+
+```
+
+```{r}
+table(FamilyMember)
+```
+
+```{r}
+titanic_mainData$FamilyMember <- FamilyMember
+head(titanic_mainData$FamilyMember)
+
+#
+#
+```
+```{r}
+#titanic_mainData$FamilyMember[titanic_mainData$FamilyMember==1] <- "Single"
+#titanic_mainData$FamilyMember[titanic_mainData$FamilyMember=="Single"]
+```
+
+```{r}
+#titanic_mainData$FamilyMember
+#titanic_mainData$FamilyMember[titanic_mainData$FamilyMember > 1 & titanic_mainData$FamilyMember <= 4 & titanic_mainData$FamilyMember != "Single"] <- "Small"
+```
+
+```{r}
+#titanic_mainData$FamilyMember
+#titanic_mainData$FamilyMember[titanic_mainData$FamilyMember >= 4 & titanic_mainData$FamilyMember != "Small" & titanic_mainData$FamilyMember != "Single"] <- "Large"
+```
+```{r}
+#titanic_mainData$FamilyMember=="Single"
+```
+
+```{r}
+#table(titanic_mainData$FamilyMember)
+```
+```{r}
+titanic_mainData$FamilyMember <- sapply(1:nrow(titanic_mainData), function(x) 
+                          ifelse(FamilyMember[x]==1, "Single", 
+                          ifelse(FamilyMember[x]>4, "Large", "Small")))
+```
+
+```{r}
+table(titanic_mainData$FamilyMember)
+```
+
+4.Data visualization
+
+```{r}
+str(titanic_mainData)
+```
+```{r}
+class(titanic_mainData$Survived)
+```
+
+```{r}
+titanic_mainData$Survived <- factor(titanic_mainData$Survived)
+titanic_mainData$Pclass = factor(titanic_mainData$Pclass)
+titanic_mainData$Sex = factor(titanic_mainData$Sex)
+titanic_mainData$Embarked = factor(titanic_mainData$Embarked)
+titanic_mainData$Title = factor(titanic_mainData$Title)
+titanic_mainData$FamilyMember = factor(titanic_mainData$FamilyMember)
+
+
+```
+
+```{r}
+str(titanic_mainData)
+```
+
+# Data analysis for survival
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(Pclass, fill=Survived)) +
+  geom_bar(position="dodge") +
+  ggtitle("Survival Rate based on Pclass")
+
+```
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(Sex, fill=Survived)) +
+  geom_bar(position="dodge" ) +
+  facet_wrap(~FamilyMember)
+  ggtitle("Survival Rate based on Sex")
+```
+
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(y=Age,x=Pclass)) + geom_violin(aes(fill=Survived), alpha=0.9) +
+  facet_wrap(~Survived)
+  ggtitle("Survival Rate based on Pclass")
+```
+
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(Title, fill=Survived)) +
+  geom_bar(position="dodge" ) +
+  facet_wrap(~Pclass)
+  ggtitle("Survival Rate based on Title")
+```
+
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(FamilyMember, fill=Survived)) +
+  geom_bar(position="dodge" ) +
+  facet_wrap(~Pclass)
+  ggtitle("Survival Rate based on Title")
+```
+
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(Sex, fill=Survived)) +
+  #geom_bar(stat="count")+
+  geom_bar(position="dodge" ) +
+  facet_wrap(~Pclass) +
+  
+  ggtitle("Survival Rate based on Title")
+```
+
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(y=Age,x=Sex)) +
+  #geom_point() +
+  geom_violin(aes(fill=Survived)) +
+  facet_wrap(~Pclass) +
+ 
+  #scale_y_continuous(labels = percent)+
+  ggtitle("Survival Rate based on Age,Sex")
+```
+
+```{r}
+
+```
+
+```{r}
+ggplot(data=filter(titanic_mainData, is.na(Survived)==FALSE), aes(Title, fill= Survived)) +
+ geom_bar(position="fill")+
+  facet_wrap(~Pclass) +
+  scale_fill_brewer(palette="Set1") +
+  scale_y_continuous(labels=percent, breaks=seq(0,1,0.05)) +
+   ggtitle("Survival Rate based on Title,Pclass")
+```
+
+#Data Analysis based on fare and embarked.
+
+
+```{r}
+ggplot(filter(titanic_mainData, is.na(Survived)==FALSE), aes(Embarked, Fare, colour = Survived)) + 
+  #geom_boxplot(aes(fill=Survived), alpha=0.9) +
+  geom_boxplot(aes(fill=Survived)) +
+  facet_wrap(~Survived) + 
+  scale_fill_manual(values=c("#56B4E9", "#CC79A7")) +
+  ggtitle("Survival Rate based on Embarked and Fare") 
+
+```
+Interestingly, there is a substantial variation of fares in the survived category, especially from Cherbourg and Southampton ports.
+
+Visual analysis of data concludes:
+
+the wealthier passengers in the first class had a higher survival rate;
+
+females had a higher survival rate than males in each class;
+
+male "Mr" passengers had the lowest survival rate amongst all the classes; and
+
+large families had the worst survival rate than singletons and small families.
+
+
+Looking into visualization features :Pclass, Sex, Age, SibSp, Parch, Fare, Embarked, Title and FamilyMember are useful, ignore the Name, Ticket and Cabin
+
+
+
+5. Algorithm
+
+5.1 Splitting the dataset into the Training set and Test set
+
+We have done all the data  manipulation and data transformation, we can divide test and train
+
+# Divide the dataset into the Training set and Test set
+
+
+```{r}
+train_original <- titanic_mainData[1: 891, c("Survived", "Pclass", "Sex","Age","SibSp","Parch","Fare","Embarked","Title","FamilyMember")]
+```
+```{r}
+train_test <- titanic_mainData[892: 1309, c( "Pclass", "Sex","Age","SibSp","Parch","Fare","Embarked","Title","FamilyMember")]
+```
+
+
+5.2 Splitting the training set into the Training set and Validation set
+
+#cor(train_original[sapply(train_original, is.numeric)])
+
+Split the training set into the training set (80% of training data) and validation set (20% of training data) for the evaluation purposes of the fitted models.
+
+# Splitting the Training set into the Training set and Validation set
+
+```{r separate records for test and train}
+set.seed(789)
+
+split = sample.split(train_original$Survived, SplitRatio = 0.8)
+train = subset(train_original, split == TRUE)
+test = subset(train_original, split == FALSE)
+```
+
+5.3 Logistic Regression
+
+Before we go ahead with Logistic regression, Let's check the Logistic Regression assumptions: features should be independent from each other and residuals are not autocorrelated.
+
+# Show the correlation of numeric features
+
+```{r - find correlation among numeric variable}
+cor(train_original[sapply(train, is.numeric)])
+```
+
+In statistics, two variables are strongly correlated if the correlation coefficient is more than 0.75 (Threshold values can be 0.70 or 0.8) or less than -0.75. After looking into the correlation matrix, none of the numeric features are strongly correlated. Hence, the Multicollinearity (a given feature in the model can be approximated by a linear combination of the other features in the model) does not exist among numeric features.
+
+# Show the p-value of Chi Square tests
+
+```{r}
+ps = chisq.test(train$Pclass, train$Sex)$p.value
+pe = chisq.test(train$Pclass, train$Embarked)$p.value
+pt = chisq.test(train$Pclass, train$Title)$p.value
+pf = chisq.test(train$Pclass, train$FamilyMember)$p.value
+se = chisq.test(train$Sex, train$Embarked)$p.value
+st = chisq.test(train$Sex, train$Title)$p.value
+sf = chisq.test(train$Sex, train$FamilyMember)$p.value
+et = chisq.test(train$Embarked, train$Title)$p.value
+ef = chisq.test(train$Embarked, train$FamilyMember)$p.value
+tf = chisq.test(train$Title, train$FamilyMember)$p.value
+
+cormatrix = matrix(c(0, ps, pe, pt, pf,
+                     ps, 0, se, st, sf,
+                     pe, se, 0, et, ef,
+                     pt, st, et, 0, tf,
+                     pf, sf, ef, tf, 0), 
+                   5, 5, byrow = TRUE)
+
+
+cormatrix
+
+
+```
+```{r}
+colnames(cormatrix) = c("Pclass", "Sex", "Embarked", "Title", "FamilySize")
+row.names(cormatrix) = c("Pclass", "Sex", "Embarked", "Title", "FamilySize")
+cormatrix
+```
+
+
+
+Chi Square is used to find the corelation between between the categorical/qualitative features.
+We can see that all the features has p < 0.05, hence they are corelated. The features are not independent and multicollinearity exists among them.
+
+#Fitting the Logistic regression model on traning set
+```{r Logsitic model}
+glm.fit <- glm(Survived ~ .,  family=binomial(link='logit') , data=train)
+#glm.fit <- glm(Survival ~ .,  family="binomial" , data=train)
+
+```
+#Using the best model by selecting AIC
+#Step() will run the model for each variable iteratively and give the best model on top as per ranking on AIC
+
+```{r}
+
+glm.fit <- step(glm.fit)
+
+
+```
+```{r}
+summary(glm.fit)
+```
+We can see that pvalue for Sexmale, TitleMiss, TitleMrs are greater than 0.05 ie above threshold. Also the Std Errors are high for above features due to High corelation as we have seen during ChiSqare test.
+
+#Test variable inflation factor
+
+```{r}
+vif(glm.fit)
+
+```
+We can see that GVIF ( generalized variable inflation factor) is high for Sex and title, which clearly proove the multicollinearity between sex and title.
+
+We will drop sex from our model it has high degree of multicollinearity.
+
+#Fit the logistic regression model on training data after removing the sex feature.
+
+```{r}
+
+glm.fit <- glm(Survived ~ . -Sex, family = binomial(link='logit'), data=train)
+
+
+```
+
+#Using the best model by selecting AIC
+#Step() will run the model for each variable iteratively and give the best model on top as per #ranking on AIC.
+
+```{r}
+glm.fit <-step(glm.fit)
+```
+#Verify the coeeficient of best model and test the p-value
+
+```{r}
+summary(glm.fit)
+```
+
+#Test the variable inflation factor for model
+
+```{r}
+vif(glm.fit)
+```
+
+```{r}
+durbinWatsonTest(glm.fit)
+
+```
+
+Below are the observation from above 3 test( summary, vif and durbinwatsonTest)
+1.The std Error are in resonable range
+2.The GVIF values all are less than 5
+3.The D-W Statistic p-value values are 1.95 and .575 respectively. pvalue is greater than 0.05, hence we do not reject H0. the residuals are not autocorrelated.
+
+Now according to best model Pclass,Age, Title, FamilyMember significantly contributes in model for predicting the survuval.
+
+#Predict the survival for validation test
+
+```{r}
+survived_prob <- predict(glm.fit, type="response", newdata=test)
+
+```
+
+#Calculate prediction
+```{r}
+
+survived_pred <- ifelse(survived_prob > 0.5 , 1, 0)
+
+```
+
+# Checking the prediction accuracy
+```{r}
+table(test$Survived,survived_pred )
+```
+
+#Accuracy is below
+```{r}
+mean(test$Survived == survived_pred)
+```
+We will see the performance of model using Plot and Graph
+
+#Find the ROC
+
+```{r}
+
+ROC <- roc(test$Survived, survived_pred)
+```
+
+#Plot the area
+```{r}
+plot(ROC, col= "red")
+```
+
+#Find the total areas under curve
+```{r}
+auc(ROC)
+```
+
+The ROC (Receiver Operating Characteristics) curve is a graphical representation of the performnace of the classifier and it shows the performance of our model rises well above the diagonal line. This indicates that our logistic regression model performs better than just a random guess. The logistic regression model delivers a 0.8342 accuracy interms of predicting the survival.
+
+5.2 Decision Tree
+#Fit decision tree on train data
+
+```{r}
+decision_tree.fit <- rpart(Survived ~ . , data=train, method = "class", control = rpart.control(cp=0))
+```
+
+#Plot tree
+```{r}
+rpart.plot(decision_tree.fit)
+```
+
+
+#plot tree with customized setting
+```{r}
+rpart.plot(decision_tree.fit,type=3, box.palette = c("red", "green"), fallen.leaves = TRUE)
+```
+Tree uses features like title, fare, familyMember, Pclass, age.
+
+
+```{r}
+rpart.plot(decision_tree.fit, extra=4)
+```
+
+Predict the validation set on above model
+
+#use predict function for validation set
+```{r}
+y_prob = predict(decision_tree.fit, newdata=test[,-which(names(test)=="Survived")], type = "class")
+```
+
+#Examine the confusion matrix
+```{r}
+table(test$Survived, y_prob)
+```
+
+#Compute accuracy on test data
+```{r}
+mean(test$Survived == y_prob)
+```
+The accuracy is : 0.8539326
+
+Overfitting can easily occur in Decision Tree classification. We can idenfity that evaluating the model using k-Fold Cross Validation
+
+
+
+
+
+
+
+#Apply above K-Fold 
+```{r}
+set.seed(789)
+folds <- createMultiFolds(train$Survived, k = 10, times =5)
+train.control <- trainControl(method = "repeatedcv", index = folds)
+dt_cv <- train(Survived ~ . , data = train, method = "rpart", trControl = train.control)
+
+```
+
+#Plot
+```{r}
+print(dt_cv$finalModel)
+names(dt_cv)
+#rpart.plot(dt_cv$finalModel)
+
+
+```
+
+#Predict on test data
+```{r}
+
+#y_pred_cv = predict(dt_cv, newdata=test[,-which(names(test)=="Survived")])
+y_pred_cv = predict(dt_cv, newdata=test)
+
+
+```
+```{r}
+head(test)
+
+```
+
+
+
+#find confusion matrix
+```{r}
+table(test$Survived, y_pred_cv)
+```
+#Find accuracy
+```{r}
+mean(test$Survived == y_pred_cv)
+```
+
+We were not much able to improve the model after 10-fold cross validation. The accuracy is almost same to 0.8427 but note the improved model uses only three features Title, Pclass and Fare for classification.
+
+5.3 Random Forest
+
+This is similar to decision tree, in random forest many trees are created called as forest instead of one tree like decision tree algorithm.In decision tree, tree root is created based on variable having gini index and information gain. In random forest trees are created on each variables and letter based on voting or ensemble method, model predict the outcomes.
+
+# building a simple random forest
+set.seed(432)
+
+```{r}
+
+RF.fit = randomForest(Survived ~ ., data = train)
+nrow(RF.fit)
+
+```
+
+#Plot the random forest
+```{r}
+plot(RF.fit)
+```
+
+The green, black and red lines represent error rate for death, overall and survival, respectively. The overall error rate converges to around 17%. Interestingly, our model predicts death better than survival. Since the overall error rate converges to a constant and does not seem to further decrease, our choice of default 500 trees in the randomForest function is a good choice
+
+# Predicting on test set results
+```{r}
+nrow(test)
+y_pred <-predict(RF.fit, newdata = test[,-which(names(test)=="Survived")])
+
+
+```
+
+#Create confusion matrix
+```{r}
+table(test$Survived,y_pred)
+
+
+```
+
+#Find accuracy of model
+```{r}
+mean(test$Survived == y_pred)
+```
+
+The accuracy of model is : 83%
+
+The accuracy of model is less than decision tree model, we will run now K-fold cross validation
+to check if that improves the accuracy.
+
+#Apply cross validation
+
+```{r}
+
+set.seed(651)
+folds <- createMultiFolds(train$Survived, k=10)
+
+control <- trainControl(method = "repeatedcv", index=folds)
+
+RF.fit_cv <- train(Survived ~ . , data=train, method = "rf",trControl=control)
+
+
+```
+Predict the test data
+
+```{r}
+y_pred_cv <- predict(RF.fit_cv, newdata=test)
+```
+
+#Find accuracy and confusion matrix
+
+```{r}
+table(test$Survived, y_pred_cv)
+
+mean(test$Survived == y_pred_cv)
+```
+We can see that k-Fold validation has not improved the prediction.
+
+
+
+
+The interpretation  of random forest is not easy, let us find the importance variable of entire forest modeled above.
+
+#Plot the important features used in random forest
+
+```{r}
+varImpPlot(RF.fit)
+
+```
+
+
+We can check the important features as per gini index
+
+```{r}
+varImp(RF.fit)
+```
+The feature Title has the highest mean gini index, hence the highest importance. Fare is also realtively high important and it is followed by Age of the passenger
+
+
+
+5.4 Naive bayes
+
+Naive Bayes is based on the assumption that conditional probability of each feature given the class is independent of all the other features. The assumption of independent conditional probabilities means the features are completely independent of each other. This assumption was already checked in the Logistic Regression section and we have found that numeric features are independent to each other, however, the categorical features are not. By assuming the idependence assumption of all the features, let's fit a naive bayes model to our training data.
+
+#Create model
+```{r}
+NB.fit <- naiveBayes(Survived ~ ., data = train)
+```
+
+#Predict using model
+```{r}
+NB.y_pred= predict(NB.fit, newdata=test[,-which(names(test)=="Survived")])
+
+```
+
+#Find accuracy and confusion matrix
+```{r}
+
+table(test$Survived, NB.y_pred)
+
+```
+
+#Find accuracy
+
+```{r}
+mean(test$Survived ==NB.y_pred)
+```
+
+
+The accuracy of Naive bayes model is : 84 percent
+Naive bayes perform well, its accuracy is quite good and comparable to other algorithms.
+
+
+
+5.5 Discussion
+
+Comparision of Models
+
+Logistic model
+
+-The accuracy of model is 0.8341
+-Pclass, Age, Title, FamilyMember are the features contributed in model.
+-Confusion matix has 9 false positives and 17 false negatives.
+
+Decision Tree
+
+-The accuracy of model is 0.8427
+-Pclass, Fare, Title  are the features contributed in model.
+-Confusion matix has 11 false positives and 17 false negatives.
+
+Random Forest
+
+-The accuracy of model is 0.8371 and K-fold cross validation did not improved the accuracy.
+-Title, Fare, Age  are the features contributed in model in same order respectively.
+-Confusion matix has 18 false positives and 15 false negatives.
+
+Naive Bayes
+
+-The accuracy of model is 0.8341
+-The features where independent
+-Confusion matix has 11 false positives and 17 false negatives.
+
+
+6.Final Prediction on Model
+
+```{r - Logistic Regression}
+glm.fit.predict <- predict(glm.fit, newdata = train_test, type="response")
+```
+
+
+```{r  -Decision tree}
+decision_tree.fit.predict <- predict(decision_tree.fit, newdata=train_test)
+```
+
+
+```{r - Random Forest}
+RF.fit.predict <- predict(RF.fit, newdata=train_test, type="class")
+```
+
+```{r - Navie Bayes}
+NB.fit.predict <- predict(NB.fit, newdata=train_test, type="class")
+```
+
+Store the results
+
+```{r}
+glm.fit.predict_results <- data.frame(PassengerID = titanic_mainData[892:1309,"PassengerId"], Survived = glm.fit.predict)
+
+decision_tree.fit.predict_results <- data.frame(PassengerID = titanic_mainData[892:1309,"PassengerId"], Survived = decision_tree.fit.predict)
+
+RF.fit.predict_results <- data.frame(PassengerID = titanic_mainData[892:1309,"PassengerId"], Survived = RF.fit.predict)
+
+NB.fit.predict_results <- data.frame(PassengerID = titanic_mainData[892:1309,"PassengerId"], Survived = NB.fit.predict)
+
+
+
+
+
+```
+
+Save the results in Excel sheet
+```{r}
+
+write.csv(glm.fit.predict_results, file = 'PredictingTitanicSurvival_glm.csv', row.names = FALSE, quote=FALSE)
+write.csv(decision_tree.fit.predict_results, file = 'PredictingTitanicSurvival_dt.csv', row.names = FALSE, quote=FALSE)
+write.csv(RF.fit.predict_results, file = 'PredictingTitanicSurvival_rf.csv', row.names = FALSE, quote=FALSE)
+write.csv(NB.fit.predict_results, file = 'PredictingTitanicSurvival_nb.csv', row.names = FALSE, quote=FALSE)
+
+
+```
+
+
+
+
+
+
