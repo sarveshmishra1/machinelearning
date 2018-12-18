@@ -875,7 +875,7 @@ decision_tree.fit.predict <- predict(decision_tree.fit, newdata=train_test)
 RF.fit.predict <- predict(RF.fit, newdata=train_test, type="class")
 ```
 
-```{r - Navie Bayes}
+```{r - Naive Bayes}
 NB.fit.predict <- predict(NB.fit, newdata=train_test, type="class")
 ```
 
