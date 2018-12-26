@@ -1,0 +1,554 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Name - Sarvesh Kumar Mishra
+Date - 19-12-2018
+title: "R Notebook -Exploratory Data Analysis and Multiple Linear Regression on Medical Cost Personal Dataset"
+Introduction -To give you some background, insurance companies should collect higher premium than the amount paid to the insured person. Due to this, insurance companies invests a lot of time, effort, and money in creating models that accurately predicts health care costs.I will use the the data provided in the Medical Cost Personal Dataset exploring which personal factors are important to predicting medical costs, and then I will perform a linear regression analysis.
+
+
+-About the File -This dataset consists of 1338 rows.
+
+-Columns:
+
+age: age of primary beneficiary
+
+sex: insurance contractor gender, female, male
+
+bmi: Body mass index, providing an understanding of body, weights that are relatively high or low relative to height, objective index of body weight (kg / m ^ 2) using the ratio of height to weight, ideally 18.5 to 24.9
+
+children: Number of children covered by health insurance / Number of dependents
+
+smoker: Smoking
+
+region: the beneficiary's residential area in the US, northeast, southeast, southwest, northwest.
+
+charges: Individual medical costs billed by health insurance
+
+
+
+1.Load packages and dataset
+
+#Load libraries
+```{r}
+#library(ggplot)
+library(ggplot2) #visualization 
+library(ggthemes)
+library(psych)
+library(relaimpo)
+library(readr) #read in the data
+
+library(corrplot) #visualization of correlation
+library(ggcorrplot) #visualization of correlation
+library(reshape2) #melt function
+library(dplyr) #used for data transformations
+library(tidyverse) #used for data transformations
+library(naniar)
+library(Amelia) # Missing Data: Missings Map
+library(caTools) # Prediction: Splitting Data
+library(car) # Prediction: Checking Multicollinearity
+library(GGally)
+library(corpcor)
+library(mctest)
+library(ppcor)
+```
+
+#Read the insurance dataset
+
+```{r}
+insurance <- read.csv("E:/Git/sarveshmishra1/machinelearning/LinearRegression/insurance.csv")
+```
+
+#Verify the data
+```{r}
+head(insurance, n=5)
+```
+
+#Verify the column structure and values
+```{r}
+str(insurance)
+```
+
+The total number of observation is - 1338
+The data set has 7 features.
+We will predict the charges
+
+
+2.Exploratory Data Analysis
+
+#Summarise the dataset
+```{r}
+summary(insurance)
+
+```
+
+The dataset does not have missing values in any of the features. The average medical cost os 13,270 USD and median of 9382 USD.
+
+#Check the missing values using visualization
+```{r}
+gg_miss_var(insurance)
+```
+
+#Visualization for missing data
+```{r}
+missmap(insurance, main = "Insurance Data - Missing Data", col = c("Red", "Yellow"), legend=FALSE)
+```
+
+
+#Charges per region
+
+```{r}
+ggplot(data = insurance, aes(x=region, y=charges)) +
+  geom_boxplot(fill = c(6:9))+
+  ggtitle("Medical charges per region")
+```
+
+The medical cost is almost same of all the region.
+
+#Charges based on smoking
+```{r}
+fun_mean <- function(x){
+  return(data.frame(y=mean(x),label=mean(x,na.rm=T)))}
+
+ggplot(data = insurance, aes(x=smoker, y=charges)) +
+  geom_boxplot(fill = c(6:7))+
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=3) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.7) +
+  geom_hline(aes(yintercept=mean(charges, na.rm=T)), colour = "red", linetype="dashed", size=2) +
+  ggtitle("Medical charges per smoking")
+  
+```
+The medical cost for smokers are far more as compared to non smoker. We can see that mean charges for smoker is almost 4 time of non smoker.
+
+#Medical Charges based on gender
+```{r}
+fun_mean <- function(x){
+  return(data.frame(y=mean(x),label=mean(x,na.rm=T)))}
+
+ggplot(data = insurance, aes(x=sex, y=charges)) +
+  geom_boxplot(aes(fill=sex))+
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=3) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.7) +
+  geom_hline(aes(yintercept=mean(charges, na.rm=T)), colour = "red", linetype="dashed", size=2) +
+  ggtitle("Medical charges based on sex")
+  
+```
+
+The medical charges is almost same based on sex, but it is greater for male as compared to female.
+
+#Charges based on number of children
+
+```{r}
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+ggplot(data = insurance, aes(x=factor(children), y=charges)) +
+  geom_boxplot(aes(fill=children))+
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=3) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.7) +
+  geom_hline(aes(yintercept=mean(charges, na.rm=T)), colour = "red", linetype="dashed", size=2)+
+  ggtitle("Medical charges by  children")
+  
+```
+
+The children count has no impact on charges but the family with 5 children as low average cost.
+
+#Add the variable for BMI to define the threshold for obesity
+
+```{r}
+insurance$obesity <- ifelse(insurance$bmi > 30, "yes", "no")
+head(insurance$obesity, n=2)
+```
+
+
+#Medical cost by BMI
+
+```{r}
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+ggplot(data = insurance, aes(x=obesity, y=charges)) +
+  geom_boxplot(aes(fill=obesity))+
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  
+  #geom_text( aes(label = charges, y = charges + 0.08)) +
+
+  geom_hline(aes(yintercept=mean(charges, na.rm=T)), colour = "red", linetype="dashed", size=2)+
+  ggtitle("Medical charges by  BMI")
+  
+```
+
+The obesity does not play any role in medical cost, but charges is almost 50% more for more obese individuals.
+
+check the collinearity test between numeric features.
+```{r}
+
+pairs.panels(insurance[c("age", "bmi", "children", "charges")])
+
+```
+#Pair correlation
+```{r}
+ggpairs(insurance)
+```
+
+
+
+
+
+#Find correlation among numeric features
+
+```{r}
+cor(insurance[sapply(insurance, is.numeric)])
+```
+
+None of the above correlation pairs are above 0.75, hence features are not correlated
+
+```{r}
+corr <- round(cor(insurance[sapply(insurance, is.numeric)]), 1)
+ggcorrplot(corr, hc.order = TRUE, type = "lower",
+   lab = TRUE)
+
+ggcorrplot(corr, method = "circle")
+```
+
+We can see that the highest correlation is 0.3, the correlation value above .7 or .8, can be considered as features are correlated.
+
+
+```{r}
+str(insurance)
+```
+Farrar - Glauber Test
+The 'mctest' package in R provides the Farrar-Glauber test and other relevant tests for multicollinearity. There are two functions viz. 'omcdiag' and 'imcdiag' under 'mctest' package in R which will provide the overall and individual diagnostic checking for multicollinearity respectively
+
+
+```{r}
+omcdiag(insurance[,c("age", "bmi", "children", "charges")],insurance$charges)
+```
+
+The value of the standardized determinant is found to be 0.8678 which is very small. The calculated value of the Chi-square test statistic is found to be 189.1647 and it is not significant thereby implying the non presence of multicollinearity in the model specification.
+We can go for the next step of Farrar - Glauber test (F - test) to show that there is no multicollinearity.
+
+```{r}
+imcdiag(insurance[,c("age", "bmi", "children", "charges")],insurance$charges)
+```
+The VIF, TOL and Wi columns provide the diagnostic output for variance inflation factor, tolerance and Farrar-Glauber F-test respectively.
+Above shows that, there is no corelation between features.
+
+Again by looking at the partial correlation coefficient matrix among the variables, it is also clear that none of the features are  high.
+
+```{r}
+X<-insurance[,c("age", "bmi", "children", "charges")]
+cor2pcor(cov(insurance[c("age", "bmi", "children", "charges")]))
+```
+
+In R, there are several packages for getting the partial correlation coefficients along with the t- test for checking their significance level. We'll the 'ppcor' package to compute the partial correlation coefficients along with the t-statistic and corresponding p-values.
+
+```{r}
+pcor(insurance[,c("age", "bmi", "children", "charges")], method = "pearson")
+```
+Above shows that none of the pvalue and t-value are high.
+
+
+# Show the p-value of Chi Square tests
+#Convert features into factor
+```{r}
+#insurance$children <- factor(insurance$children)
+#insurance$obesity <- factor(insurance$obesity)
+#insurance$sex <- factor(insurance$sex)
+
+
+
+```
+
+
+```{r}
+#(ncol(head(insurance$sex, n=5)))
+```
+
+
+
+```{r}
+#This is used when x and y has different level of factor
+# make up some data
+set.seed(32892917)
+#mydata <- data.frame(group=as.factor(insurance$sex),race=as.factor(insurance$children))
+
+# look at the table:
+# (mytab <- with(mydata,table(group,race)) )
+#chisq.test(mytab)$p.value
+#sc = chisq.test(insurance$Sex, insurance$children)$p.value
+
+```
+
+```{r}
+#mapply(function(x, y) chisq.test(x, y)$p.value, insurance[, c('sex','children','smoker','region','obesity')], #MoreArgs=list(insurance[, c('sex','children','smoker','region','obesity')]))
+```
+
+
+
+
+```{r}
+#sc = chisq.test(insurance$Sex, insurance$children)$p.value
+#ss = chisq.test(insurance$Sex, insurance$smoker)$p.value
+#sr = chisq.test(insurance$Sex, insurance$region)$p.value
+#so = chisq.test(insurance$Sex, insurance$obesity)$p.value
+#cs = chisq.test(insurance$children, insurance$smoker)$p.value
+#cr = chisq.test(insurance$children, insurance$region)$p.value
+#co = chisq.test(insurance$children, insurance$obesity)$p.value
+#sr = chisq.test(insurance$smoker, insurance$region)$p.value
+#so = chisq.test(insurance$smoker, insurance$obesity)$p.value
+
+#ro = chisq.test(insurance$region, insurance$obesity)$p.value 
+
+sc =chisq.test(with(data.frame(group=as.factor(insurance$sex),race=as.factor(insurance$children)),
+                table(group,race)))$p.value
+
+ss =chisq.test(with(data.frame(group=as.factor(insurance$sex),race=as.factor(insurance$smoker)),
+                table(group,race)))$p.value
+
+sr =chisq.test(with(data.frame(group=as.factor(insurance$sex),race=as.factor(insurance$region)),
+                table(group,race)))$p.value
+
+so =chisq.test(with(data.frame(group=as.factor(insurance$sex),race=as.factor(insurance$obesity)),
+                table(group,race)))$p.value
+
+cs =chisq.test(with(data.frame(group=as.factor(insurance$children),race=as.factor(insurance$smoker)),
+                table(group,race)))$p.value
+
+cr =chisq.test(with(data.frame(group=as.factor(insurance$children),race=as.factor(insurance$region)),
+                table(group,race)))$p.value
+
+co =chisq.test(with(data.frame(group=as.factor(insurance$children),race=as.factor(insurance$obesity)),
+                table(group,race)))$p.value
+
+sr =chisq.test(with(data.frame(group=as.factor(insurance$smoker),race=as.factor(insurance$region)),
+                table(group,race)))$p.value
+
+so =chisq.test(with(data.frame(group=as.factor(insurance$smoker),race=as.factor(insurance$obesity)),
+                table(group,race)))$p.value
+
+ro =chisq.test(with(data.frame(group=as.factor(insurance$region),race=as.factor(insurance$obesity)),
+                table(group,race)))$p.value
+
+
+cormatrix = matrix(c(0, sc, ss, sr, so,
+                     sc, 0, cs, cr, co,
+                     ss, cs, 0, sr, so,
+                     sr, cr, sr, 0, ro,
+                     so, co, so, ro, 0), 
+                   5, 5, byrow = TRUE)
+
+
+cormatrix
+
+
+```
+
+
+```{r}
+colnames(cormatrix) = c("Sex", "children", "smoker", "region", "obesity")
+row.names(cormatrix) = c("Sex", "children", "smoker", "region", "obesity")
+cormatrix
+```
+
+We can conclude following
+1. The features are correlated if p < 0.05
+2. Correlation between sex and smoker ( 0.006), sex and region, sex and obesity
+3. smoker, region ; smoker, obesity
+4. region, sex; region, smoker; region, obesity
+5. obesity, region; 
+
+We will verify above multicollinearity below during model build.
+
+#Create training and test set
+```{r}
+
+set.seed(42)
+#Suffle the row
+rows <- sample(nrow(insurance))
+
+insurance <- insurance[rows, ]
+
+#Split the 80/20 train and test data
+
+split <- round(nrow(insurance) * 0.80  )
+insurance_train <- insurance[1 : split, ]
+insurance_test <- insurance[(split +1) : nrow(insurance),]
+
+
+
+
+```
+
+Create Model
+```{r}
+lm.fit <- lm(charges ~ . , data = insurance_train)
+summary(lm.fit)
+
+```
+
+Using the best model by selecting AIC
+
+#Step() will run the model for each variable iteratively and give the best model on top as per ranking on AIC
+```{r}
+lm.fit <- step(lm.fit)
+```
+
+```{r}
+summary(lm.fit)
+```
+
+We can see that std error is very high for region, smoker and obesity, importance to be verified with VIF test.
+R-Squared = 0.76
+
+#Find VIF
+
+```{r}
+vif(lm.fit)
+
+```
+
+The above VIF shows that, the general VIF's are below 5, hence the variables are not correlated.
+Also smoker, region and obesity contribute to model
+
+
+Further we can plot the model diagnostic checking for other problems such as normality of error term, heteroscedasticity etc.
+  
+```{r}
+par(mfrow=c(2,2))
+plot(lm.fit)
+```
+  
+We can consider the synergy effect of variables ie between obesity and smoker.
+
+
+```{r}
+lm.fit2 <- lm(charges ~ age +sex + bmi + children + smoker + region + obesity + obesity * smoker , data=insurance_train)
+summary(lm.fit2)
+```
+We could see that R-square is - 86.94%
+
+Predict the charges on test data and find R-squared
+
+```{r}
+insurance_test$predict <- predict(lm.fit2, newdata=insurance_test)
+write.csv(insurance_test, file = 'InsuranceCostForecast.csv', row.names = FALSE, quote=FALSE)
+
+rss <- sum((insurance_test$predict - insurance_test$charges)^2)
+tss <- sum((insurance_test$charges - mean(insurance_test$charges))^2)
+
+(rsq = 1- (rss/tss))
+
+
+
+```
+We can see that model predicted on test data which is almost good at accuracy of - 84.60%
+
+
+Calculate RMSE
+
+```{r}
+#res <- (insurance_test$predict - insurance_test$charges)
+#(rmse <- sqrt(mean(res^2)))
+#(sd <- sd(insurance_test$charges))
+```
+Plot the model
+```{r}
+#plot(age,charges,col=smoker)
+ggplot(data=insurance, aes(x=age, y=charges)) +
+  geom_point(aes(colour = factor(smoker)))
+```
+
+Visualization of prediction
+```{r}
+ggplot(data=insurance_test, aes(x=predict, y=charges))+
+  geom_point()+
+  geom_abline()
+```
+The prediction is almost good for 80 prcnt of data.
+
+Gain plot
+```{r}
+
+library(WVPlots)
+
+GainCurvePlot(insurance_test, "predict", "charges", "lm.fit2")
+```
+Apply model on new data
+
+Let's imagine 3 different people and see what charges on health care will be for them.
+
+A: 19 years old, BMI 27.9, has no children, smokes, from northwest region.
+
+B: 40 years old, BMI 50, 2 children, doesn't smoke, from southeast region.
+
+C: 30 years old. BMI 31.2, no children, doesn't smoke, from northeast region.
+
+```{r}
+A <- data.frame(age = 19,
+                  bmi = 27.9,
+                  children = 0,
+                  smoker = "yes",
+                   sex="male",
+                obesity="no",
+                  region = "northwest")
+print(paste0("Health care charges for A: ", round(predict(lm.fit2, A), 2)))
+```
+
+```{r}
+B <- data.frame(age = 40,
+                  bmi = 50,
+                  children = 2,
+                  smoker = "no",
+                   sex="female",
+                    obesity="yes",
+                  region = "southeast")
+print(paste0("Health care charges for B: ", round(predict(lm.fit2, B), 2)))
+```
+
+```{r}
+C <- data.frame(age = 30,
+                  bmi = 31.2,
+                  children = 0,
+                  smoker = "no",
+                   sex="male",
+                    obesity="yes",
+                  region = "northeast")
+print(paste0("Health care charges for C: ", round(predict(lm.fit2, C), 2)))
+```
+
+
+Shapley Value regression is a technique for working out the relative importance of predictor variables in linear regression. Its principal application is to resolve a weakness of linear regression, which is that it is not reliable when predicted variables are moderately to highly correlated. Shapley Value regression is also known as Shapley regression
+
+We will use a statistical method called shapley value regression which is a solution that originated from the Game Theory concept developed by Lloyd Shapley in the 1950s. It's aim is to fairly allocate predictor importance in regression analysis. Given n number of independent variables (IV), we will run all combination of linear regression models using this list of IVs against the dependent variable (DV) and get each model's R-Squared.
+
+We have used the calc.relimp() function from the relaimpo package to determine the Shapley Value of our predictors.
+
+
+
+
+```{r}
+ins_model2_shapley<-calc.relimp(lm.fit2,type="lmg")
+ins_model2_shapley
+summary(ins_model2_shapley)
+```
+```{r}
+sum(ins_model2_shapley$lmg)
+```
+
+
+```{r}
+barplot(sort(ins_model2_shapley$lmg,decreasing = TRUE),col=c(2:10),main="Relative Importance of Predictors",xlab="Predictor Labels",ylab="Shapley Value Regression",font.lab=2)
+```
+Above plot shows the important features in the order which is almost similar to our model features.
+
+Closure
+
+I have tried to test the features with multiple method and tried to show that features are correlated or not. I will add or update the model accordingly when ever I learn new stuffs.
+
+Thankyou all for visiting my kernel and reading this!!!
+
