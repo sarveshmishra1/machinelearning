@@ -1,0 +1,927 @@
+Name - Sarvesh kumar Mishra
+DataSet -Winedata set.
+Introduction - 
+
+Have you ever tried to reveal the presence of clusters in a high-dimensional dataset? Indeed this task arises very often. For example, let's imagine that our goal is to understand which factors impact on the ranking of calls in the customer support call center using historical reports. The ranks are in a range from 1 and 5, which means that we have 5 classes. The obvious approach is to build the multi-class classification model in order to reach the goal. We may spend a lot of time trying to build an accurate model that distinguishes well between 5 classes in the target variable. What if after wasting a lot of time, we are still unable to achieve good results? May it happen that we deal with a "not well behaved" class structures? Maybe we lack explanatory factors in the dataset? Of course, it is possible to analyze learning curves in order to understand if the model has a low or high variance of the parameter estimates across samples (bias-variance tradeoff) in order to conclude if more samples or more factors should be added to the dataset. However, there are other complementary approaches that may help revealing "not well behaved" class structures at an early stage of the analysis. This is what we are going to investigate in this notebook.
+
+
+For our analysis we will use the wine dataset. This dataset contains the results of a chemical analysis of wines grown in the same region in Italy but derived from 3 different cultivars. Our goal will be to reveal the presence of clusters in the wine dataset. In other words, we will check if 3 cultivators are distinguishable in the dataset.
+
+Columns Name- 
+Alcohol
+Malic_Acid
+Ash
+Ash_Alcanity
+Magnesium
+Total_Phenols
+Flavanoids
+Nonflavanoid_Phenols
+Proanthocyanins
+Color_Intensity
+Hue
+OD280
+Proline
+Customer_Segment
+
+1.Load the required library
+```{r}
+#Load library
+
+suppressWarnings(library(tidyverse)) #data manipulation
+suppressWarnings(library(corrplot)) #correlation
+suppressWarnings(library(gridExtra)) #visualization
+suppressWarnings(library(GGally)) #plot
+suppressWarnings(library(dplyr)) # Data Manipulation
+suppressWarnings(library(naniar)) #missing data
+suppressWarnings(library(Amelia)) # Missing Data: Missings Map
+suppressWarnings(library(ggplot2)) # Visualization
+suppressWarnings(library(scales)) # Visualization
+suppressWarnings(library(caTools)) # Prediction: Splitting Data
+suppressWarnings(library(car)) # Prediction: Checking Multicollinearity
+
+```
+
+2.Read Wine data set
+
+```{r}
+wine_dataset = read.csv("E:/Git/sarveshmishra1/machinelearning/UnsupervisedLearning/Wine.csv")
+
+```
+
+3.Verify the loaded data
+
+```{r}
+head(wine_dataset, n =5)
+
+```
+Remove the customer segment id columns
+
+```{r}
+wine_dataset$Customer_Segment <- NULL
+ncol(wine_dataset)
+
+```
+
+4. Exploratory data Analysis
+
+Verify the structure of Data
+
+```{r}
+str(wine_dataset)
+```
+
+
+Summarize the data
+```{r}
+summary(wine_dataset)
+```
+
+```{r}
+glimpse(wine_dataset)
+```
+
+All the column are defined as number or integer.
+
+Check the missing values in column ( NA) not the blank values
+```{r}
+gg_miss_var(wine_dataset)
+```
+No missing values in columns.
+
+missmap allows us to explore how much missing data we have.
+```{r}
+
+
+
+missmap(wine_dataset, main = "Wine Data - Missing Data", col = c("Red", "Yellow"), legend=FALSE)
+
+```
+
+Visualization of variables
+
+```{r}
+wine_dataset %>%
+  keep(is.numeric) %>%                     # Keep only numeric columns
+  gather() %>%                             # Convert to key-value pairs
+  ggplot(aes(value)) +                     # Plot the values
+  geom_histogram(fill="green", colour="black") +
+    facet_wrap(~ key, scales = "free") +   # In separate panels
+    geom_density() +
+  labs(x="Values", y="Frequency")
+```
+
+```{r}
+wine_dataset %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram()
+```
+
+
+```{r}
+
+require(reshape2)
+
+melt.wine_dataset <- melt(wine_dataset)
+ggplot(data = melt.wine_dataset, aes(x = value)) + 
+stat_density() + 
+facet_wrap(~variable, scales = "free")
+```
+
+From above density we can see, the densities are not normal an presence of outliers. Identify outliers using box plot.
+
+```{r}
+boxplot(wine_dataset,
+        las = 2,
+        col = c("red","sienna","palevioletred1","royalblue2","red","sienna","palevioletred1", 
+        "royalblue2","red","sienna","palevioletred1","royalblue2"),
+        at =c(1,2,3,4, 5,6,7,8,9, 10,11,12,13),
+        par(mar = c(12, 5, 4, 2) + 0.1)
+        
+        )
+```
+
+From above boxplot we can see that features like Malic_Acid, Ash,Ash_Alcanity, Magnesium, Proanthocyanins ,Color_Intensity       
+Hue have outliers.
+
+Lets us create Boxplot, separate for each to understand in details.
+
+```{r}
+
+calcmed <- function(x) {
+   return(c(y = 8, label = round(median(x), 1)))
+   # modify 8 to suit your needs
+}
+
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+#boxplot(wine_dataset[,c(2)], col="red")
+ggplot(data=wine_dataset, aes(x=1, y=Malic_Acid)) +
+  geom_boxplot(fill="red")+
+  #geom_dotplot(binaxis='y', stackdir='center', dotsize=1)+
+  stat_summary(fun.data = calcmed, geom = "text") +
+  
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  geom_hline(aes(yintercept=mean(Malic_Acid, na.rm=T)), colour = "white", linetype="dashed", size=2)
+
+
+
+```
+Find the outliers values for Malic_Acid
+```{r}
+print("The outlier values for  Malic_Acid are below: ")
+boxplot(wine_dataset$Malic_Acid, plot=FALSE)$out
+```
+
+Outlier treatment - There are 3 ways for outlier treatment
+1.Remove the obervation with outlier
+2.Imputation - Replace outlier with mean, medain mode.
+3.Capping - For missing values that lie outside the 1.5 * IQR limits, we could cap it by replacing those observations outside the lower limit with the value of 5th %ile and those that lie above the upper limit, with the value of 95th %ile.
+
+I have tried both method, Imputation and Capping, Imputation did not removed the outlier, it has added another one.
+Capping worked perfect, hence we will use capping method for outlier treatment.
+we will use method 2, that is Impuation to replace outliers.
+
+Outlier treatment for Malic_Acid. Below is the test I performed with mean, but still the outliers
+
+```{r}
+wine_dataset_RND <- wine_dataset
+
+#wine_dataset_RND$Malic_Acid[wine_dataset_RND$Malic_Acid  %in% c(5.80, 5.51, 5.65)] <- mean(wine_dataset_RND$Malic_Acid, na.rm = T)
+
+print("The outlier values for  Malic_Acid are below: ")
+boxplot(wine_dataset_RND$Malic_Acid, plot=FALSE)$out
+
+```
+```{r}
+x <- wine_dataset$Malic_Acid
+qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(x, na.rm = T)
+x[x < (qnt[1] - H)] <- caps[1]
+x[x > (qnt[2] + H)] <- caps[2]
+
+wine_dataset$Malic_Acid <- x
+
+print("The outlier values for  Malic_Acid are below: ")
+boxplot(wine_dataset$Malic_Acid, plot=FALSE)$out
+```
+
+
+
+Visualization plot for : Ash
+
+```{r}
+#Malic_acid, Ash,Ash_Alcanity, Magnesium, Proanthocyanins ,Color_Intensity       
+#Hue
+calcmed <- function(x) {
+   return(c(y = 8, label = round(median(x), 1)))
+   # modify 8 to suit your needs
+}
+
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+ggplot(data=wine_dataset, aes(x=1, y=Ash)) +
+  geom_boxplot(fill="green") +
+  #geom_dotplot(binaxis='y', stackdir='center', dotsize=1) +
+    #geom_dotplot(binaxis='y', stackdir='center', dotsize=1)+
+  stat_summary(fun.data = calcmed, geom = "text") +
+  
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  geom_hline(aes(yintercept=mean(Ash, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
+
+```
+Find the outliers values for Ash
+```{r}
+print("The outlier values for  Ash are below: ")
+boxplot(wine_dataset$Ash, plot=FALSE)$out
+```
+
+Outlier treatment for Ash - The mean method did not removed the outliers, hence will use capping method.
+
+```{r}
+wine_dataset_RND <- wine_dataset
+wine_dataset_RND$Ash[wine_dataset_RND$Ash  %in% c(3.22, 1.36, 3.23)] <- median(wine_dataset_RND$Ash, na.rm = T)
+
+print("The outlier values for  Ash are below: ")
+boxplot(wine_dataset_RND$Ash, plot=FALSE)$out
+
+```
+
+```{r}
+x <- wine_dataset$Ash
+qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(x, na.rm = T)
+x[x < (qnt[1] - H)] <- caps[1]
+x[x > (qnt[2] + H)] <- caps[2]
+
+wine_dataset$Ash <- x
+
+print("The outlier values for  Ash are below: ")
+boxplot(wine_dataset$Ash, plot=FALSE)$out
+```
+
+
+The visualization plot for Ash_Alcanity.
+```{r}
+#Malic_acid, Ash,Ash_Alcanity, Magnesium, Proanthocyanins ,Color_Intensity       
+#Hue
+
+calcmed <- function(x) {
+   return(c(y = 8, label = round(median(x), 1)))
+   # modify 8 to suit your needs
+}
+
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+ggplot(data=wine_dataset, aes(x=1, y=Ash_Alcanity)) +
+  geom_boxplot(fill="dark green") +
+      #geom_dotplot(binaxis='y', stackdir='center', dotsize=1)+
+  stat_summary(fun.data = calcmed, geom = "text") +
+  
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  geom_hline(aes(yintercept=mean(Ash_Alcanity, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
+
+```
+Find the outliers values for Ash_Alcanity.
+```{r}
+print("The outlier values for  Ash_Alcanity. are below: ")
+boxplot(wine_dataset$Ash_Alcanity, plot=FALSE)$out
+```
+
+Outlier treatment for Ash_Alcanity - For Ash_Alcanity both the method producd the same results and remvoed the outliers, but we will use the capping method as it worked for all the variables.
+
+```{r}
+wine_dataset_RND <- wine_dataset
+
+wine_dataset_RND$Ash_Alcanity[wine_dataset_RND$Ash_Alcanity  %in% c(10.6, 30.0, 28.5, 28.5)] <- median(wine_dataset_RND$Ash_Alcanity, na.rm = T)
+
+print("The outlier values for  Ash_Alcanity are below: ")
+boxplot(wine_dataset_RND$Ash_Alcanity, plot=FALSE)$out
+
+```
+
+```{r}
+x <- wine_dataset$Ash_Alcanity
+qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(x, na.rm = T)
+x[x < (qnt[1] - H)] <- caps[1]
+x[x > (qnt[2] + H)] <- caps[2]
+
+wine_dataset$Ash_Alcanity <- x
+
+print("The outlier values for  Ash_Alcanity are below: ")
+boxplot(wine_dataset$Ash_Alcanity, plot=FALSE)$out
+```
+
+
+Visualization plot for Magnesium
+```{r}
+#Malic_acid, Ash,Ash_Alcanity, Magnesium, Proanthocyanins ,Color_Intensity       
+#Hue
+
+calcmed <- function(x) {
+   return(c(y = 8, label = round(median(x), 1)))
+   # modify 8 to suit your needs
+}
+
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+ggplot(data=wine_dataset, aes(x=1, y=Magnesium)) +
+  geom_boxplot(fill="purple") +
+  stat_summary(fun.data = calcmed, geom = "text") +
+  
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  geom_hline(aes(yintercept=mean(Magnesium, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
+
+```
+Find the outliers values for Magnesium
+```{r}
+print("The outlier values for  Magnesium are below: ")
+boxplot(wine_dataset$Magnesium, plot=FALSE)$out
+```
+
+Outlier treatment for Magnesium - 
+Since the mean and median are almost same, we replaced the outliers with mean and median but that end up addition of new 
+outliers ie 134, we will use capping method here.
+
+```{r}
+wine_dataset_RND <- wine_dataset
+wine_dataset_RND$Magnesium[wine_dataset_RND$Magnesium  %in% c(151, 139, 136, 162)] <- median(wine_dataset_RND$Magnesium, na.rm = T)
+
+print("The outlier values for  Magnesium are below: ")
+boxplot(wine_dataset_RND$Magnesium, plot=FALSE)$out
+
+```
+
+
+```{r}
+x <- wine_dataset$Magnesium
+qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(x, na.rm = T)
+x[x < (qnt[1] - H)] <- caps[1]
+x[x > (qnt[2] + H)] <- caps[2]
+
+wine_dataset$Magnesium <- x
+
+print("The outlier values for  Magnesium are below: ")
+boxplot(wine_dataset$Magnesium, plot=FALSE)$out
+```
+
+Above we can see caping method able to remove all the outliers and did not added up any new observations.
+
+Visualization for Proanthocyanins
+
+```{r}
+#Malic_acid, Ash,Ash_Alcanity, Magnesium, Proanthocyanins ,Color_Intensity       
+#Hue
+calcmed <- function(x) {
+   return(c(y = 8, label = round(median(x), 1)))
+   # modify 8 to suit your needs
+}
+
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+ggplot(data=wine_dataset, aes(x=1, y=Proanthocyanins)) +
+  geom_boxplot(fill="light blue") +
+  stat_summary(fun.data = calcmed, geom = "text") +
+  
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  geom_hline(aes(yintercept=mean(Proanthocyanins, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
+
+```
+Find the outliers values for Proanthocyanins
+```{r}
+print("The outlier values for  Proanthocyanins are below: ")
+boxplot(wine_dataset$Proanthocyanins, plot=FALSE)$out
+```
+Outlier treatment for Proanthocyanins - Since the mean and median are almost same, we can repalce this with either mean or medain. Imputation method able to remove the outliers but we will finally use the capping method.
+
+```{r}
+
+wine_dataset_RND <- wine_dataset
+wine_dataset_RND$Proanthocyanins[wine_dataset_RND$Proanthocyanins  %in% c(3.28, 3.58)] <- median(wine_dataset_RND$Proanthocyanins, na.rm = T)
+
+print("The outlier values for  Proanthocyanins are below: ")
+boxplot(wine_dataset_RND$Proanthocyanins, plot=FALSE)$out
+```
+
+```{r}
+x <- wine_dataset$Proanthocyanins
+qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(x, na.rm = T)
+x[x < (qnt[1] - H)] <- caps[1]
+x[x > (qnt[2] + H)] <- caps[2]
+
+wine_dataset$Proanthocyanins <- x
+
+print("The outlier values for  Proanthocyanins are below: ")
+boxplot(wine_dataset$Proanthocyanins, plot=FALSE)$out
+```
+
+
+
+Visualization for Color_Intensity
+
+```{r}
+#Malic_acid, Ash,Ash_Alcanity, Magnesium, Proanthocyanins ,Color_Intensity       
+#Hue
+calcmed <- function(x) {
+   return(c(y = 8, label = round(median(x), 1)))
+   # modify 8 to suit your needs
+}
+
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+
+ggplot(data=wine_dataset, aes(x=1, y=Color_Intensity)) +
+  geom_boxplot(fill="pink") +
+    stat_summary(fun.data = calcmed, geom = "text") +
+  
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  geom_hline(aes(yintercept=mean(Color_Intensity, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
+
+```
+Find the outliers values for Color_Intensity
+```{r}
+print("The outlier values for  Color_Intensity are below: ")
+boxplot(wine_dataset$Color_Intensity, plot=FALSE)$out
+```
+Outlier treatment for Color_Intensity - The Imputation method could not able to remove the outliers and added up new one as below. We will continue to go ahead with capping method for outliers treatment.
+
+
+```{r}
+#This section is just to show that mean and median repalcement did not worked.
+wine_dataset_RND <- wine_dataset
+wine_dataset_RND$Color_Intensity[wine_dataset_RND$Color_Intensity  %in% c(10.80, 13.00, 11.75)] <- median(wine_dataset_RND$Color_Intensity, na.rm = T)
+
+print("The outlier values for  Color_Intensity are below: ")
+boxplot(wine_dataset$Color_Intensity, plot=FALSE)$out
+```
+
+```{r}
+x <- wine_dataset$Color_Intensity
+qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(x, na.rm = T)
+x[x < (qnt[1] - H)] <- caps[1]
+x[x > (qnt[2] + H)] <- caps[2]
+
+wine_dataset$Color_Intensity <- x
+
+print("The outlier values for  Color_Intensity are below: ")
+boxplot(wine_dataset$Color_Intensity)$out
+```
+Above we can see capping has removed all outliers from Color_Intensity.
+
+Visualization for Hue.
+```{r}
+#Malic_acid, Ash,Ash_Alcanity, Magnesium, Proanthocyanins ,Color_Intensity       
+#Hue
+calcmed <- function(x) {
+   return(c(y = 8, label = round(median(x), 1)))
+   # modify 8 to suit your needs
+}
+
+fun_mean <- function(x){
+  return (round((data.frame(y=mean(x),label=mean(x,na.rm=T))),2))}
+
+ggplot(data=wine_dataset, aes(x=1, y=Hue)) +
+  geom_boxplot(fill="yellow")+
+  #geom_dotplot(binaxis='y', stackdir='center', dotsize=1) +
+     stat_summary(fun.data = calcmed, geom = "text") +
+  
+  stat_summary(fun.y = mean, geom="point",colour="darkred", size=5) +
+  stat_summary(fun.data = fun_mean, geom="text", vjust=-0.5) +
+  geom_hline(aes(yintercept=mean(Hue, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
+
+```
+Find the outliers values for Hue
+
+```{r}
+print("The outlier values for hue are below: ")
+boxplot(wine_dataset$Hue, plot=FALSE)$out
+```
+
+Outlier treatment for Hue - The Imputation method able to remove all the outliers, but we will go ahead with capping method for 
+outliers treatment.
+
+```{r}
+#This section is just for showcase purpose for outliers with Imputation method.
+wine_dataset_RND <- wine_dataset
+wine_dataset_RND$Hue[wine_dataset_RND$Hue  %in% c(1.71)] <- median(wine_dataset_RND$Hue, na.rm = T)
+
+print("The outlier values for  Hue are below: ")
+boxplot(wine_dataset_RND$Hue, plot=FALSE)$out
+```
+
+```{r}
+x <- wine_dataset$Hue
+qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
+caps <- quantile(x, probs=c(.05, .95), na.rm = T)
+H <- 1.5 * IQR(x, na.rm = T)
+x[x < (qnt[1] - H)] <- caps[1]
+x[x > (qnt[2] + H)] <- caps[2]
+
+wine_dataset$Hue <- x
+
+print("The outlier values for  Hue are below: ")
+boxplot(wine_dataset$Hue, plot=FALSE)$out
+```
+
+
+Let us verify again with combined Box plot
+
+```{r}
+boxplot(wine_dataset,
+        las = 2,
+        col = c("red","sienna","palevioletred1","royalblue2","red","sienna","palevioletred1", 
+        "royalblue2","red","sienna","palevioletred1","royalblue2"),
+        at =c(1,2,3,4, 5,6,7,8,9, 10,11,12,13),
+        par(mar = c(12, 5, 4, 2) + 0.1)
+        
+        )
+```
+Hurray!, we can see above all the outliers are removed with capping method.
+
+```{r}
+
+require(reshape2)
+
+melt.wine_dataset <- melt(wine_dataset)
+ggplot(data = melt.wine_dataset, aes(x = value)) + 
+stat_density() + 
+facet_wrap(~variable, scales = "free")
+```
+
+Analysis and visualization of numeric variables.
+
+```{r}
+wine_dataset_numericVars <- which(sapply(wine_dataset, is.numeric))
+wine_dataset_numericVarNames <- names(wine_dataset_numericVars)
+
+paste("There are ", length(wine_dataset_numericVars) ," numeric variable in datasets")
+cat("\n") # print one blank new line
+
+print(wine_dataset_numericVarNames)
+```
+
+
+Find the corelation between numeric variables.
+
+```{r}
+
+cor(wine_dataset[sapply(wine_dataset, is.numeric)])
+
+```
+
+
+
+```{r}
+library(corrgram)
+corrgram(wine_dataset, order=TRUE, lower.panel=panel.shade,
+  upper.panel=panel.pie, text.panel=panel.txt,
+  main="Wine dataSet")
+```
+```{r}
+M<-cor(wine_dataset)
+corrplot(M, method="number")
+```
+
+The features which are highly correlated
+Flavanoids and Total_Phenols
+Flavanoids and OD280
+
+Let us draw scatter plot for above.
+
+```{r}
+ggplot(data=wine_dataset, aes(x=Total_Phenols, y=Flavanoids))+
+  geom_point() + geom_smooth(method="lm", se=FALSE)
+```
+
+```{r}
+ggplot(data=wine_dataset, aes(x=OD280, y=Flavanoids))+
+  geom_point() + geom_smooth(method="lm", se=FALSE)
+```
+The Flavanoids and OD280 are less correlated as compared to Total_Phenols.
+
+6. data preprocess
+
+Clustering algorithm need data to be in same scale and required normalization.
+
+```{r}
+wine_datasetScaled <- as.data.frame(scale(wine_dataset))
+
+```
+
+Visualization of scaled and unscaled
+
+```{r}
+# Original data
+unscaled <- ggplot(wine_dataset, aes(x=Malic_Acid, y=Color_Intensity)) +
+  geom_point() +
+  labs(title="Original data")
+  
+# Normalized data 
+scaled <- ggplot(wine_datasetScaled, aes(x=Malic_Acid, y=Color_Intensity)) +
+  geom_point() +
+  labs(title="Normalized data")
+
+# Subplot
+grid.arrange(unscaled, scaled, ncol=2)
+```
+
+See the scale of X axis has changed.
+
+```{r}
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering algorithms & visualization
+
+distance <- get_dist(wine_datasetScaled)
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+```
+
+
+
+
+
+7. Model - K-mean clustering
+
+K-means algorithm can be summarized as follows:
+
+Specify the number of clusters (K) to be created (by the analyst)
+Select randomly k objects from the data set as the initial cluster centers or means
+Assigns each observation to their closest centroid, based on the Euclidean distance between the object and the centroid
+For each of the k clusters update the cluster centroid by calculating the new mean values of all the data points in the cluster. The centroid of a Kth cluster is a vector of length p containing the means of all variables for the observations in the kth cluster; p is the number of variables.
+Iteratively minimize the total within sum of square. That is, iterate steps 3 and 4 until the cluster assignments stop changing or the maximum number of iterations is reached. By default, the R software uses 10 as the default value for the maximum number of iteration.
+
+K-Means Clustering
+K-means clustering is the most commonly used unsupervised machine learning algorithm for partitioning a given data set into a set of k groups (i.e. k clusters), where k represents the number of groups pre-specified by the analyst. It classifies objects in multiple groups (i.e., clusters), such that objects within the same cluster are as similar as possible (i.e., high intra-class similarity), whereas objects from different clusters are as dissimilar as possible (i.e., low inter-class similarity). In k-means clustering, each cluster is represented by its center (i.e, centroid) which corresponds to the mean of points assigned to the cluster.
+
+The total within-cluster sum of square measures the compactness (i.e goodness) of the clustering and we want it to be as small as possible.
+
+
+
+Computing k-means clustering in R
+We can compute k-means in R with the kmeans function. Here will group the data into two clusters (centers = 2). The kmeans function also has an nstart option that attempts multiple initial configurations and reports on the best one. For example, adding nstart = 25 will generate 25 initial configurations. This approach is often recommended.
+
+```{r}
+# Execution of k-means with k=2
+set.seed(1234)
+wines_km.out <- kmeans(wine_datasetScaled, centers=2, nstart = 25)
+
+```
+
+Show the summary and elements of Model.
+```{r}
+
+print(wines_km.out)
+
+```
+Summarize the above output
+1. There are 2 cluster, cluster size 1: 86, Cluster size2 = 92
+2. Cluster 1 has maximum elements of Flavanoids, Total_Phenols
+3. Cluster 2 has maximum elements of Nonflavanoid_Phenols, Ash_Alcanity
+
+
+kmeans returns an object of class which has a print and a fitted method. It is a list with at least the following components:
+
+cluster	A vector of integers (from 1:k) indicating the cluster to which each point is allocated.
+centers	A matrix of cluster centres.
+totss	The total sum of squares.
+withinss	Vector of within-cluster sum of squares, one component per cluster.
+tot.withinss	Total within-cluster sum of squares, i.e. sum(withinss).
+betweenss	The between-cluster sum of squares, i.e. totss-tot.withinss.
+size	The number of points in each cluster.
+iter	The number of (outer) iterations.
+ifault	integer: indicator of a possible algorithm problem - for experts
+
+
+Print the cluster elements
+```{r}
+print(wines_km.out$cluster)
+```
+Print the cluster centers
+```{r}
+print(wines_km.out$centers)
+```
+1. Cluster 1 has maximum elements of Flavanoids, Total_Phenols
+2. Cluster 2 has maximum elements of Nonflavanoid_Phenols, Ash_Alcanity
+
+
+The below paramter provide information about cluster charectistics  and size.
+
+betweenss. The between-cluster sum of squares. In an optimal segmentation, one expects this ratio to be as higher as possible, since we would like to have heterogeneous clusters.
+
+withinss. Vector of within-cluster sum of squares, one component per cluster. In an optimal segmentation, one expects this ratio to be as lower as possible for each cluster, since we would like to have homogeneity within the clusters.
+
+tot.withinss. Total within-cluster sum of squares.
+
+totss. The total sum of squares
+
+```{r}
+
+paste("Total within-cluster sum of squares: ", round(wines_km.out$tot.withinss,2))
+paste("Total sum of squares: ",round(wines_km.out$totss,2))
+
+paste("Within-cluster sum of squares: ",round(wines_km.out$withinss,2))
+paste("Between-cluster sum of squares: ",round(wines_km.out$betweenss,2))
+
+```
+
+Visualization and interpretation of results.
+```{r}
+plot(as.matrix(wine_datasetScaled), col=wines_km.out$cluster, main = "K mean with 2 cluster",
+     xlab="", ylab="")
+```
+```{r}
+library(cluster)
+ library(fpc)
+ plotcluster(wine_datasetScaled,wines_km.out$cluster)
+points(wines_km.out$centers,col=1:8,pch=16)
+```
+```{r}
+clusplot(wine_datasetScaled, wines_km.out$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+```
+
+We can also view our results by using fviz_cluster. This provides a nice illustration of the clusters. If there are more than two dimensions (variables) fviz_cluster will perform principal component analysis (PCA) and plot the data points according to the first two principal components that explain the majority of the variance.
+
+```{r}
+fviz_cluster(wines_km.out, data = wine_datasetScaled)
+```
+
+
+
+
+checking mean for each object in each cluster
+
+Usually, as the result of a k-means clustering analysis, we would examine the means for each cluster on each dimension to assess how distinct our k clusters are
+
+```{r}
+wines_km.out$centers
+```
+
+
+Determining Optimal Clusters
+As you may recall the analyst specifies the number of clusters to use; preferably the analyst would like to use the optimal number of clusters. To aid the analyst, the following explains the three most popular methods for determining the optimal clusters, which includes:
+
+Elbow method
+Silhouette method
+Gap statistic
+
+Elbow Method  -The basic idea behind cluster partitioning methods, such as k-means clustering, is to define clusters such that the total intra-cluster variation (known as total within-cluster variation or total within-cluster sum of square) is minimized:
+
+The total within-cluster sum of square (wss) measures the compactness of the clustering and we want it to be as small as possible. Thus, we can use the following algorithm to define the optimal clusters:
+
+Compute clustering algorithm (e.g., k-means clustering) for different values of k. For instance, by varying k from 1 to 10 clusters
+For each k, calculate the total within-cluster sum of square (wss)
+Plot the curve of wss according to the number of clusters k.
+The location of a bend (knee) in the plot is generally considered as an indicator of the appropriate number of clusters.
+
+
+```{r}
+#Initialize the total within sum of square error: wss
+set.seed(1234)
+wss<- 0
+
+#For 1 to 15 cluster centers
+for ( i in 1:15) {
+  
+  km.out <- kmeans(wine_datasetScaled, centers = i, nstart = 25)
+  wss[i] <- km.out$tot.withinss
+  
+}
+
+
+plot(1:15, wss, type="b",
+     xlab="Number of cluster", ylab="Within groups sum of squares")
+
+
+```
+Elbow method shows k =3
+
+Fortunately, this process to compute the "Elbow method" has been wrapped up in a single function (fviz_nbclust):
+
+```{r}
+set.seed(1234)
+
+fviz_nbclust(wine_datasetScaled, kmeans, method = "wss")
+
+
+```
+The Elbow methos shows k =3
+
+2.Average Silhouette Method
+In short, the average silhouette approach measures the quality of a clustering. That is, it determines how well each object lies within its cluster. A high average silhouette width indicates a good clustering. The average silhouette method computes the average silhouette of observations for different values of k. 
+
+We can use the silhouette function in the cluster package to compuate the average silhouette width. The following code computes this approach for 1-15 clusters. The results show that 2 clusters maximize the average silhouette values with 4 clusters coming in as second optimal number of clusters.
+
+```{r}
+# function to compute average silhouette for k clusters
+avg_sil <- function(k) {
+  km.res <- kmeans(wine_datasetScaled, centers = k, nstart = 25)
+  ss <- silhouette(km.res$cluster, dist(wine_datasetScaled))
+  mean(ss[, 3])
+}
+
+# Compute and plot wss for k = 2 to k = 15
+k.values <- 2:15
+
+# extract avg silhouette for 2-15 clusters
+avg_sil_values <- map_dbl(k.values, avg_sil)
+
+plot(k.values, avg_sil_values,
+       type = "b", pch = 19, frame = FALSE, 
+       xlab = "Number of clusters K",
+       ylab = "Average Silhouettes")
+```
+
+Similar to the elbow method, this process to compute the "average silhoutte method" has been wrapped up in a single function (fviz_nbclust):
+
+```{r}
+fviz_nbclust(wine_datasetScaled, kmeans, method = "silhouette")
+```
+The number of cluster required for Silhouettes is 3.
+
+3. Gap Statistic Method
+The gap statistic has been published by R. Tibshirani, G. Walther, and T. Hastie (Standford University, 2001). The approach can be applied to any clustering method (i.e. K-means clustering, hierarchical clustering). The gap statistic compares the total intracluster variation for different values of k with their expected values under null reference distribution of the data (i.e. a distribution with no obvious clustering).
+
+To compute the gap statistic method we can use the clusGap function which provides the gap statistic and standard error for an output
+
+```{r}
+# compute gap statistic
+set.seed(1234)
+gap_stat <- clusGap(wine_datasetScaled, FUN = kmeans, nstart = 25,
+                    K.max = 10, B = 50)
+
+print(gap_stat, method = "firstmax")
+```
+We can visualize the results with fviz_gap_stat which suggests four clusters as the optimal number of clusters.
+
+```{r}
+fviz_gap_stat(gap_stat)
+```
+The optimal number of cluster by Gap statistics are - 3, K=3
+
+Since k=3 is the value estimated by all method, we will use k=3 and remodel again.
+
+```{r}
+# Execution of k-means with k=3
+set.seed(1234)
+wines_km.out <- kmeans(wine_datasetScaled, centers=3, nstart = 25,iter.max = 50)
+
+print(wines_km.out)
+
+```
+
+Visualization and interpretation of results.
+```{r}
+plot(as.matrix(wine_datasetScaled), col=wines_km.out$cluster, main = "K mean with 3 cluster",
+     xlab="", ylab="")
+```
+```{r}
+library(cluster)
+ library(fpc)
+ plotcluster(wine_datasetScaled,wines_km.out$cluster)
+points(wines_km.out$centers,col=1:8,pch=16)
+```
+```{r}
+clusplot(wine_datasetScaled, wines_km.out$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+```
+
+
+```{r}
+fviz_cluster(wines_km.out, data = wine_datasetScaled)
+```
+```{r}
+wine_datasetScaled %>%
+  mutate(Cluster = wines_km.out$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("mean")
+```
+
+
+
+We have seen the wine data set has 3 cluster which separate the wine property.
+
+Thank you!!!.
+
