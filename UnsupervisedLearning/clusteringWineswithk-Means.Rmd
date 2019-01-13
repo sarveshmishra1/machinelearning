@@ -171,6 +171,9 @@ ggplot(data=wine_dataset, aes(x=1, y=Malic_Acid)) +
 
 
 ```
+In above graph, while horizontal line indicate mean line and value , the box plot black line indicates median value with value 
+on the top of box.
+
 Find the outliers values for Malic_Acid
 ```{r}
 print("The outlier values for  Malic_Acid are below: ")
@@ -182,21 +185,23 @@ Outlier treatment - There are 3 ways for outlier treatment
 2.Imputation - Replace outlier with mean, medain mode.
 3.Capping - For missing values that lie outside the 1.5 * IQR limits, we could cap it by replacing those observations outside the lower limit with the value of 5th %ile and those that lie above the upper limit, with the value of 95th %ile.
 
-I have tried both method, Imputation and Capping, Imputation did not removed the outlier, it has added another one.
-Capping worked perfect, hence we will use capping method for outlier treatment.
-we will use method 2, that is Impuation to replace outliers.
+I have tried both method, Imputation and Capping, Imputation did not removed the outlier, it has added another one or more outlier with new values. Capping worked perfect, hence we will use capping method for outlier treatment.
 
-Outlier treatment for Malic_Acid. Below is the test I performed with mean, but still the outliers
+
+Outlier treatment for Malic_Acid. Below is the test with imputation I performed with mean, but still the outliers
 
 ```{r}
+#This block is to showcase the outlier replacement with mean of respective observation.
 wine_dataset_RND <- wine_dataset
-
-#wine_dataset_RND$Malic_Acid[wine_dataset_RND$Malic_Acid  %in% c(5.80, 5.51, 5.65)] <- mean(wine_dataset_RND$Malic_Acid, na.rm = T)
+wine_dataset_RND$Malic_Acid[wine_dataset_RND$Malic_Acid  %in% c(5.80, 5.51, 5.65)] <- mean(wine_dataset_RND$Malic_Acid, na.rm = T)
 
 print("The outlier values for  Malic_Acid are below: ")
 boxplot(wine_dataset_RND$Malic_Acid, plot=FALSE)$out
 
 ```
+We can see in above test, 3 new outliers got introduced in data. We will use capping method as below.
+
+
 ```{r}
 x <- wine_dataset$Malic_Acid
 qnt <- quantile(x, probs=c(.25, .75), na.rm = T)
@@ -237,6 +242,8 @@ ggplot(data=wine_dataset, aes(x=1, y=Ash)) +
   geom_hline(aes(yintercept=mean(Ash, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
 
 ```
+In above graph, dark blue horizontal line indicate mean line and value , the box plot black line indicates median value with value on the top of box.
+
 Find the outliers values for Ash
 ```{r}
 print("The outlier values for  Ash are below: ")
@@ -246,9 +253,9 @@ boxplot(wine_dataset$Ash, plot=FALSE)$out
 Outlier treatment for Ash - The mean method did not removed the outliers, hence will use capping method.
 
 ```{r}
+#This block is to showcase the outlier replacement with mean of respective observation.
 wine_dataset_RND <- wine_dataset
 wine_dataset_RND$Ash[wine_dataset_RND$Ash  %in% c(3.22, 1.36, 3.23)] <- median(wine_dataset_RND$Ash, na.rm = T)
-
 print("The outlier values for  Ash are below: ")
 boxplot(wine_dataset_RND$Ash, plot=FALSE)$out
 
@@ -292,6 +299,9 @@ ggplot(data=wine_dataset, aes(x=1, y=Ash_Alcanity)) +
   geom_hline(aes(yintercept=mean(Ash_Alcanity, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
 
 ```
+In above graph, dark blue horizontal line indicate mean line and value , the box plot black line indicates median value with value on the top of box.
+
+
 Find the outliers values for Ash_Alcanity.
 ```{r}
 print("The outlier values for  Ash_Alcanity. are below: ")
@@ -301,8 +311,8 @@ boxplot(wine_dataset$Ash_Alcanity, plot=FALSE)$out
 Outlier treatment for Ash_Alcanity - For Ash_Alcanity both the method producd the same results and remvoed the outliers, but we will use the capping method as it worked for all the variables.
 
 ```{r}
+#This block is to showcase the outlier replacement with mean of respective observation.
 wine_dataset_RND <- wine_dataset
-
 wine_dataset_RND$Ash_Alcanity[wine_dataset_RND$Ash_Alcanity  %in% c(10.6, 30.0, 28.5, 28.5)] <- median(wine_dataset_RND$Ash_Alcanity, na.rm = T)
 
 print("The outlier values for  Ash_Alcanity are below: ")
@@ -347,6 +357,9 @@ ggplot(data=wine_dataset, aes(x=1, y=Magnesium)) +
   geom_hline(aes(yintercept=mean(Magnesium, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
 
 ```
+
+In above graph, dark blue horizontal line indicate mean line and value , the box plot black line indicates median value with value on the top of box.
+
 Find the outliers values for Magnesium
 ```{r}
 print("The outlier values for  Magnesium are below: ")
@@ -358,6 +371,7 @@ Since the mean and median are almost same, we replaced the outliers with mean an
 outliers ie 134, we will use capping method here.
 
 ```{r}
+#This block is to showcase the outlier replacement with mean/median of respective observation.
 wine_dataset_RND <- wine_dataset
 wine_dataset_RND$Magnesium[wine_dataset_RND$Magnesium  %in% c(151, 139, 136, 162)] <- median(wine_dataset_RND$Magnesium, na.rm = T)
 
@@ -405,15 +419,17 @@ ggplot(data=wine_dataset, aes(x=1, y=Proanthocyanins)) +
   geom_hline(aes(yintercept=mean(Proanthocyanins, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
 
 ```
+In above graph, dark blue horizontal line indicate mean line and value , the box plot black line indicates median value with value on the top of box.
+
 Find the outliers values for Proanthocyanins
 ```{r}
 print("The outlier values for  Proanthocyanins are below: ")
 boxplot(wine_dataset$Proanthocyanins, plot=FALSE)$out
 ```
-Outlier treatment for Proanthocyanins - Since the mean and median are almost same, we can repalce this with either mean or medain. Imputation method able to remove the outliers but we will finally use the capping method.
+Outlier treatment for Proanthocyanins - Since the mean and median are almost same, we can repalce this with either mean or medain. Imputation method also able to remove the outliers but we will finally use the capping method.
 
 ```{r}
-
+#This block is to showcase the outlier replacement with mean/median of respective observation.
 wine_dataset_RND <- wine_dataset
 wine_dataset_RND$Proanthocyanins[wine_dataset_RND$Proanthocyanins  %in% c(3.28, 3.58)] <- median(wine_dataset_RND$Proanthocyanins, na.rm = T)
 
@@ -460,6 +476,8 @@ ggplot(data=wine_dataset, aes(x=1, y=Color_Intensity)) +
   geom_hline(aes(yintercept=mean(Color_Intensity, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
 
 ```
+In above graph, dark blue horizontal line indicate mean line and value , the box plot black line indicates median value with value on the top of box.
+
 Find the outliers values for Color_Intensity
 ```{r}
 print("The outlier values for  Color_Intensity are below: ")
@@ -469,7 +487,7 @@ Outlier treatment for Color_Intensity - The Imputation method could not able to 
 
 
 ```{r}
-#This section is just to show that mean and median repalcement did not worked.
+#This block is to showcase the outlier replacement with mean/median of respective observation.
 wine_dataset_RND <- wine_dataset
 wine_dataset_RND$Color_Intensity[wine_dataset_RND$Color_Intensity  %in% c(10.80, 13.00, 11.75)] <- median(wine_dataset_RND$Color_Intensity, na.rm = T)
 
@@ -514,6 +532,8 @@ ggplot(data=wine_dataset, aes(x=1, y=Hue)) +
   geom_hline(aes(yintercept=mean(Hue, na.rm=T)), colour = "dark blue", linetype="dashed", size=2)
 
 ```
+In above graph, dark blue horizontal line indicate mean line and value , the box plot black line indicates median value with value on the top of box.
+
 Find the outliers values for Hue
 
 ```{r}
@@ -525,7 +545,7 @@ Outlier treatment for Hue - The Imputation method able to remove all the outlier
 outliers treatment.
 
 ```{r}
-#This section is just for showcase purpose for outliers with Imputation method.
+#This block is to showcase the outlier replacement with mean/median of respective observation.
 wine_dataset_RND <- wine_dataset
 wine_dataset_RND$Hue[wine_dataset_RND$Hue  %in% c(1.71)] <- median(wine_dataset_RND$Hue, na.rm = T)
 
@@ -584,6 +604,11 @@ cat("\n") # print one blank new line
 print(wine_dataset_numericVarNames)
 ```
 
+The purpose of correlation matrix is just to show the dependency and not to remove any features. Cluster method will add the variable of same nature in one cluster, it will be taken care already.
+
+Note - We will see in mode loutcome that below variable show the maximum variability.
+Flavanoids and Total_Phenols
+Flavanoids and OD280
 
 Find the corelation between numeric variables.
 
@@ -726,6 +751,10 @@ print(wines_km.out$centers)
 ```
 1. Cluster 1 has maximum elements of Flavanoids, Total_Phenols
 2. Cluster 2 has maximum elements of Nonflavanoid_Phenols, Ash_Alcanity
+
+This we have seen, in model outcome that below variable show the maximum variability, as we had pointed out during correlation block.
+Flavanoids and Total_Phenols
+Flavanoids and OD280
 
 
 The below paramter provide information about cluster charectistics  and size.
@@ -922,6 +951,16 @@ wine_datasetScaled %>%
 
 
 We have seen the wine data set has 3 cluster which separate the wine property.
+
+I would like to thanks stackexchange users, who have answered to my posted question. 
+
+Reference Book for this projects.
+1.Multivariate Data Analysis Joseph F. Hair Jr. William C. Black Barry J. Babin Rolph E. Anderson
+2.Introduction-Statistical-Learning-Applications-Statistics - Gareth James, Daniela Witten, Trevor Hastie, Robert Tibshirani  
+3.Applied Predictive Modeling, Max kuhn
+4.ggplot2 -Elegant Graphics for Data Analysis by Wickham, Hadley
+
+
 
 Thank you!!!.
 
